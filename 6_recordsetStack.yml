@@ -4,10 +4,10 @@ Parameters:
     Description: FQDN Hosted zone ID from Route 53
     Default: Z029856838X6MK6DAQ90R
 
-  CfHostedZoneId:
-    Type: String
-    Description: Cloudformation Hosted Zone ID
-    Default: Z2FDTNDATAQYW2
+  # CfHostedZoneId:
+  #   Type: String
+  #   Description: Cloudformation Hosted Zone ID
+  #   Default: Z2FDTNDATAQYW2
 
   # S3HostedZoneID:
   #   Type: String
