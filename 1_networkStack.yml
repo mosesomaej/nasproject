@@ -471,7 +471,7 @@ Resources:
           Value: !Sub ${EnvironmentName}-ngw-3
 
   RouteNATGateway1:
-    DependsOn: NATGateway1
+    # DependsOn: NATGateway1
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PrivateRouteTable1
@@ -479,7 +479,7 @@ Resources:
       NatGatewayId: !Ref NATGateway1
 
   RouteNATGateway2:
-    DependsOn: NATGateway2
+    # DependsOn: NATGateway2
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PrivateRouteTable2
@@ -487,7 +487,7 @@ Resources:
       NatGatewayId: !Ref NATGateway2
 
   RouteNATGateway3:
-    DependsOn: NATGateway3
+    # DependsOn: NATGateway3
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PrivateRouteTable3
