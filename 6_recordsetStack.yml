@@ -19,10 +19,10 @@ Parameters:
     Description: Domain name of cloudfront distribtion
     Default: cfdistributionStack
 
-  serverStack:
-    Type: String
-    Description: ServerStack
-    Default: foxserverStack #exported stack name
+  # serverStack:
+  #   Type: String
+  #   Description: ServerStack
+  #   Default: foxserverStack #exported stack name
 
 # Mappings:
 #   RegionMap:
