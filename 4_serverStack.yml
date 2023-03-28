@@ -231,9 +231,9 @@ Resources:
   # AutoScaling Group
   NasASG:
     Type: AWS::AutoScaling::AutoScalingGroup
-    DependsOn:
-      - ELBTargetGroup
-      - FrontEndAlb
+    # DependsOn:
+      # - ELBTargetGroup
+      # - FrontEndAlb
     Properties:
       AutoScalingGroupName: frontend-web-ASG
       LaunchTemplate:
