@@ -9,10 +9,10 @@ Parameters:
     Description: Cloudformation Hosted Zone ID
     Default: Z2FDTNDATAQYW2
 
-  S3HostedZoneID:
-    Type: String
-    Description: CS3 Hosted Zone ID Canada central
-    Default: Z3AQBSTGFYJSTF
+  # S3HostedZoneID:
+  #   Type: String
+  #   Description: CS3 Hosted Zone ID Canada central
+  #   Default: Z3AQBSTGFYJSTF
 
   CfDomainName:
     Type: String
