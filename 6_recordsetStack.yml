@@ -24,15 +24,15 @@ Parameters:
     Description: ServerStack
     Default: foxserverStack #exported stack name
 
-Mappings:
-  RegionMap:
-    ca-central-1:
-      name: "ca-central-1"
-    # us-east-1:
-    #   name: "us-east-1"
-    # us-west-1:
-    #   name: "us-west-1"
-    # us-west-2:
+# Mappings:
+#   RegionMap:
+#     ca-central-1:
+#       name: "ca-central-1"
+#     # us-east-1:
+#     #   name: "us-east-1"
+#     # us-west-1:
+#     #   name: "us-west-1"
+#     # us-west-2:
     #   name: "us-west-2"
 
 Resources:
