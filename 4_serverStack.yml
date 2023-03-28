@@ -1,0 +1,546 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template containts the configuration details of deploying a highly available application server
+Parameters:
+  DBName:
+    Description: Database Initial name
+    Type: String
+    Default: customer_info
+
+  DBUsername:
+    NoEcho: 'false'
+    Description: Username for database access
+    Type: String
+    MinLength: '2'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+    Default: foxadmin
+  
+  CertificateStack:
+    Type: String
+    Description: Certificate Stack
+    Default: foxcertificate-Arn #exported stack name
+
+  DBPassword:
+    NoEcho: 'true'
+    Description: Password for database access
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: must contain only alphanumeric characters.
+
+  DBInstanceType:
+    Description: Database Instance Class
+    Type: String
+    Default: db.m5d.xlarge
+    AllowedValues:
+      - db.t2.xlarge
+      - db.r6g.2xlarge
+      - db.t3.small
+      - db.t3.medium
+      - db.t3.large
+      - db.t4g.large
+      - db.m6gd.xlarge
+      - db.m5d.xlarge
+  
+  instanceType:
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.nano
+      - t2.small
+      - t2.medium
+      - t2.xlarge
+    Description: Enter t2.micro, m1.small, or m1.large. Default is t2.micro.
+  
+  NetWorkStack:
+    Type: String
+    Description: NetworkStack
+    Default: foxnetworkStack #exported stack name
+  
+  PermissionStack:
+    Type: String
+    Description: IAM Roles and Permissions Stack
+    Default: foxpermissionStack #exported stack name
+    
+  KeyName:
+    Type: "AWS::EC2::KeyPair::KeyName"
+  
+Mappings:
+  RegionMap:
+    us-east-1:
+      web: ami-0b0dcb5067f052a63
+      app: ami-02b972fec07f1e659
+    us-east-2:
+      web: ami-05bfbece1ed5beb54
+    us-west-1:
+      web: ami-0f5e8a042c8bfcd5e
+      app: ami-0e587da169af43ce1
+    us-west-2:
+      web: ami-06e85d4c3149db26a
+      app: ami-08e4eaf54ff5ee95e
+    ca-central-1:
+      web: ami-0ee679ef733e3b8e7
+      app: ami-017f4811a06d3e510
+Resources:
+  NasDb:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DBClusterIdentifier: db-cluster
+      AllocatedStorage: 400
+      DatabaseName: !Ref DBName
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBClusterInstanceClass: !Ref DBInstanceType
+      Engine: mysql
+      EngineVersion: '8.0.28'
+      BackupRetentionPeriod: 7
+      DBClusterParameterGroupName: default.mysql8.0
+      StorageType: io1
+      Iops: 3000
+      Port: 3306
+      DeletionProtection: "false"
+      DBSubnetGroupName:
+        Fn::ImportValue:
+           !Sub "${NetWorkStack}-db-SubnetGroupName"
+      VpcSecurityGroupIds:
+        - Fn::ImportValue:
+           !Sub "${NetWorkStack}-RdsSgId"
+
+  FileSystemResource:
+    Type: 'AWS::EFS::FileSystem'
+    Properties:
+      BackupPolicy:
+        Status: ENABLED
+      PerformanceMode: generalPurpose
+      Encrypted: true
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_30_DAYS
+        - TransitionToPrimaryStorageClass: AFTER_1_ACCESS
+      FileSystemTags:
+        - Key: Name
+          Value: nasFileSystem
+      
+      KmsKeyId: !GetAtt 
+        - key
+        - Arn
+  key:
+    Type: AWS::KMS::Key
+    Properties:
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: key-default-1
+        Statement:
+          - Sid: Allow administration of the key
+            Effect: Allow
+            Principal:
+              AWS: !Join 
+                - ''
+                - - 'arn:aws:iam::'
+                  - !Ref 'AWS::AccountId'
+                  - ':root'
+            Action:
+              - 'kms:*'
+            Resource: 
+              - '*'
+
+  MountTargetResource1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      SubnetId:
+        Fn::ImportValue:
+          Fn::Sub: "${NetWorkStack}-PrivateSubnetOneId"
+      SecurityGroups:
+      - Fn::ImportValue:
+          Fn::Sub: "${NetWorkStack}-EfsSgId"
+
+  MountTargetResource2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      SubnetId:
+        Fn::ImportValue:
+          Fn::Sub: "${NetWorkStack}-PrivateSubnetTwoId"
+      SecurityGroups:
+      - Fn::ImportValue:
+          Fn::Sub: "${NetWorkStack}-EfsSgId"
+      
+  MountTargetResource3:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystemResource
+      SubnetId:
+        Fn::ImportValue:
+          Fn::Sub: "${NetWorkStack}-PrivateSubnetThreeId"
+      SecurityGroups:
+      - Fn::ImportValue:
+          Fn::Sub: "${NetWorkStack}-EfsSgId"
+
+# Frontend Launch Template
+  nasFrontendLT:
+    Type: AWS::EC2::LaunchTemplate
+    DependsOn: [FileSystemResource, key, MountTargetResource1, MountTargetResource2, MountTargetResource3, NasDb]
+    Properties:
+      LaunchTemplateName: frontend-web-LT
+      LaunchTemplateData:
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: nas-FrontEnd-Server
+        IamInstanceProfile:
+          Arn:
+            Fn::ImportValue:
+              !Sub '${PermissionStack}-Arn'
+        DisableApiTermination: true
+        ImageId:
+          !FindInMap [RegionMap, !Ref AWS::Region, web]
+        InstanceType: !Ref instanceType
+        KeyName: !Ref KeyName
+        SecurityGroupIds:
+          - Fn::ImportValue:
+              Fn::Sub: "${NetWorkStack}-FrontWebSgId"
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            sudo su
+            mkdir /var/www/
+            mkdir /var/www/html
+            sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport ${FileSystemResource}.efs.${AWS::Region}.amazonaws.com:/ /var/www/html/
+            yum install -y amazon-efs-utils
+            echo "${FileSystemResource}.efs.${AWS::Region}.amazonaws.com:/ /var/www/html/ efs defaults,_netdev 0 0" >> /etc/fstab
+            yum install -y httpd
+            systemctl start httpd
+            systemctl enable httpd
+            systemctl status httpd
+            wget https://wordpress.org/latest.tar.gz
+            tar -xzf latest.tar.gz
+            cp -r wordpress/* /var/www/html/
+            cp wordpress/wp-config-sample.php /var/www/html/wp-config.php
+            sed -i "s/database_name_here/${DBName}/g" /var/www/html/wp-config.php
+            sed -i "s/username_here/${DBUsername}/g" /var/www/html/wp-config.php
+            sed -i "s/password_here/${DBPassword}/g" /var/www/html/wp-config.php
+            sed -i "s/localhost/${NasDb.Endpoint.Address}/g" /var/www/html/wp-config.php
+            amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+            systemctl restart httpd
+  
+  # AutoScaling Group
+  NasASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn:
+      - ELBTargetGroup
+      - FrontEndAlb
+    Properties:
+      AutoScalingGroupName: frontend-web-ASG
+      LaunchTemplate:
+        LaunchTemplateId: !Ref nasFrontendLT
+        Version: !GetAtt nasFrontendLT.LatestVersionNumber
+      MaxSize: '5'
+      MinSize: '1'
+      DesiredCapacity: '3'
+      VPCZoneIdentifier:
+        - Fn::ImportValue:
+              Fn::Sub: "${NetWorkStack}-PublicsubnetOneId"
+        - Fn::ImportValue:
+            Fn::Sub: "${NetWorkStack}-PublicsubnetTwoId"
+        - Fn::ImportValue:
+            Fn::Sub: "${NetWorkStack}-PublicsubnetThreeId"
+      TargetGroupARNs:
+        - !Ref ELBTargetGroup
+
+# Target Group
+  ELBTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 5
+      Port: 80
+      Protocol: HTTPS
+      UnhealthyThresholdCount: 3
+      VpcId: 
+        Fn::ImportValue:
+          Fn::Sub: "${NetWorkStack}-VPCID"
+      TargetType: instance
+
+# FrontEnd Load Balanacer
+  
+  FrontEndAlb:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+        Name: "FrontEndAlb"
+        Scheme: "internet-facing"
+        Type: "application"
+        Subnets:
+          - Fn::ImportValue:
+              Fn::Sub: "${NetWorkStack}-PublicsubnetOneId"
+          - Fn::ImportValue:
+              Fn::Sub: "${NetWorkStack}-PublicsubnetTwoId"
+          - Fn::ImportValue:
+              Fn::Sub: "${NetWorkStack}-PublicsubnetThreeId"
+        SecurityGroups:
+          - Fn::ImportValue:
+              Fn::Sub: "${NetWorkStack}-FrontAlbSgId" 
+          
+        IpAddressType: "ipv4"
+        LoadBalancerAttributes: 
+          - 
+            Key: "access_logs.s3.enabled"
+            Value: "false"
+          - 
+            Key: "idle_timeout.timeout_seconds"
+            Value: "60"
+          - 
+            Key: "deletion_protection.enabled"
+            Value: "false"
+          - 
+            Key: "routing.http2.enabled"
+            Value: "true"
+          - 
+            Key: "routing.http.drop_invalid_header_fields.enabled"
+            Value: "false"
+
+  ElbListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      LoadBalancerArn: !Ref FrontEndAlb
+      Port: 80
+      Protocol: HTTP
+      DefaultActions: 
+        - Order: 1
+          TargetGroupArn: !Ref ELBTargetGroup
+          Type: "forward"
+        # - Type: redirect
+        #   RedirectConfig:
+        #     Protocol: HTTPS
+        #     Port: 443
+        #     StatusCode: HTTP_301
+        
+  # HTTPSListener:
+  #   Type: "AWS::ElasticLoadBalancingV2::Listener"
+  #   Properties:
+  #       LoadBalancerArn: !Ref FrontEndAlb
+  #       Port: 443
+  #       Protocol: "HTTPS"
+  #       SslPolicy: "ELBSecurityPolicy-2016-08"
+  #       Certificates: 
+  #         - CertificateArn: 
+  #             Fn::ImportValue: !Ref CertificateStack 
+  #       DefaultActions: 
+  #         - Order: 1
+  #           TargetGroupArn: !Ref ELBTargetGroup
+  #           Type: "forward"
+
+# S3 Bucket Static website
+  foxBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicRead
+      BucketName: fox.nasfinancialgroup.com
+      VersioningConfiguration:
+        Status: Enabled
+      CorsConfiguration:
+        CorsRules:
+        - AllowedHeaders:
+          - "*"
+          AllowedMethods:
+          - GET
+          AllowedOrigins:
+          - "*"
+          Id: Staticweb
+          MaxAge: 60
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+
+  foxBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref foxBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - 's3:GetObject'
+            Effect: Allow
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref foxBucket
+                - /*
+            Principal: '*'
+
+# INTRANET (BACKEND WEBSERVER) CONFIGURATION
+
+#   nasBackendLT:
+#     Type: AWS::EC2::LaunchTemplate
+#     DependsOn: [FileSystemResource, key, MountTargetResource1, MountTargetResource2, MountTargetResource3, NasDb]
+#     Properties:
+#       LaunchTemplateName: backend-web-LT
+#       LaunchTemplateData:
+#         TagSpecifications:
+#           - ResourceType: instance
+#             Tags:
+#               - Key: Name
+#                 Value: nas-intranet
+#         IamInstanceProfile:
+#           Arn:
+#             Fn::ImportValue:
+#               !Sub '${PermissionStack}-Arn'
+#         DisableApiTermination: true
+#         ImageId:
+#           !FindInMap [RegionMap, !Ref AWS::Region, web]
+#         InstanceType: !Ref instanceType
+#         KeyName: !Ref KeyName
+#         SecurityGroupIds:
+#           - Fn::ImportValue:
+#               Fn::Sub: "${NetWorkStack}-BackWebSgId"
+#         UserData:
+#           Fn::Base64: !Sub |
+#             #!/bin/bash
+#             sudo su
+#             mkdir /var/www/
+#             mkdir /var/www/html
+#             sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport ${FileSystemResource}.efs.${AWS::Region}.amazonaws.com:/ /var/www/html/
+#             yum install -y amazon-efs-utils
+#             echo "${FileSystemResource}.efs.${AWS::Region}.amazonaws.com:/ /var/www/html/ efs defaults,_netdev 0 0" >> /etc/fstab
+#             yum install -y httpd
+#             systemctl start httpd
+#             systemctl enable httpd
+#             systemctl status httpd
+#             wget https://wordpress.org/latest.tar.gz
+#             tar -xzf latest.tar.gz
+#             cp -r wordpress/* /var/www/html/
+#             cp wordpress/wp-config-sample.php /var/www/html/wp-config.php
+#             sed -i "s/database_name_here/${DBName}/g" /var/www/html/wp-config.php
+#             sed -i "s/username_here/${DBUsername}/g" /var/www/html/wp-config.php
+#             sed -i "s/password_here/${DBPassword}/g" /var/www/html/wp-config.php
+#             sed -i "s/localhost/${NasDb.Endpoint.Address}/g" /var/www/html/wp-config.php
+#             amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+#             systemctl restart httpd
+
+# #   BackEnd AutoScaling Group
+#   nasBackendASG:
+#     Type: AWS::AutoScaling::AutoScalingGroup
+#     DependsOn:
+#       - BackendELBTargetGroup
+#       - BackEndAlb
+#     Properties:
+#       AutoScalingGroupName: backend-web-ASG
+#       LaunchTemplate:
+#         LaunchTemplateId: !Ref nasBackendLT
+#         Version: !GetAtt nasBackendLT.LatestVersionNumber
+#       MaxSize: '5'
+#       MinSize: '1'
+#       DesiredCapacity: '3'
+#       VPCZoneIdentifier:
+#         - Fn::ImportValue:
+#               Fn::Sub: "${NetWorkStack}-PrivateSubnetOneId"
+#         - Fn::ImportValue:
+#             Fn::Sub: "${NetWorkStack}-PrivateSubnetTwoId"
+#         - Fn::ImportValue:
+#             Fn::Sub: "${NetWorkStack}-PrivateSubnetThreeId"
+#       TargetGroupARNs:
+#         - !Ref BackendELBTargetGroup
+
+# #   BackEnd Target Group
+#   BackendELBTargetGroup:
+#     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+#     Properties:
+#       HealthCheckIntervalSeconds: 30
+#       HealthCheckTimeoutSeconds: 10
+#       HealthyThresholdCount: 5
+#       Port: 80
+#       Protocol: HTTP
+#       UnhealthyThresholdCount: 2
+#       VpcId: 
+#         Fn::ImportValue:
+#           Fn::Sub: "${NetWorkStack}-VPCID"
+#       TargetType: instance
+
+# # Backend Load Balanacer
+#   BackEndAlb:
+#     Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+#     Properties:
+#       Name: "BackEndAlb"
+#       Scheme: "internal"
+#       Type: "application"
+#       Subnets:
+#         - Fn::ImportValue:
+#             Fn::Sub: "${NetWorkStack}-PrivateSubnetOneId"
+#         - Fn::ImportValue:
+#             Fn::Sub: "${NetWorkStack}-PrivateSubnetTwoId"
+#         - Fn::ImportValue:
+#             Fn::Sub: "${NetWorkStack}-PrivateSubnetThreeId"
+#       SecurityGroups:
+#         - Fn::ImportValue:
+#             Fn::Sub: "${NetWorkStack}-BackAlbSgId" 
+        
+#       IpAddressType: "ipv4"
+#       LoadBalancerAttributes: 
+#         - 
+#           Key: "access_logs.s3.enabled"
+#           Value: "false"
+#         - 
+#           Key: "idle_timeout.timeout_seconds"
+#           Value: "60"
+#         - 
+#           Key: "deletion_protection.enabled"
+#           Value: "false"
+#         - 
+#           Key: "routing.http2.enabled"
+#           Value: "true"
+#         - 
+#           Key: "routing.http.drop_invalid_header_fields.enabled"
+#           Value: "false"
+
+# #   Backend ELB Listener
+
+#   BackendElbListener:
+#     Type: 'AWS::ElasticLoadBalancingV2::Listener'
+#     Properties:
+#       DefaultActions:
+#         - Type: forward
+#           TargetGroupArn: !Ref BackendELBTargetGroup
+#       LoadBalancerArn: !Ref BackEndAlb
+#       Port: 80
+#       Protocol: HTTP
+
+Outputs: 
+  FrontEndAlbDNSName:
+    Description: A reference to the security group of the webserver in the private subnet
+    Value: !GetAtt FrontEndAlb.DNSName 
+    Export:
+      Name: !Sub '${AWS::StackName}-AlbDNS'
+
+  FoxBucketURL:
+    Description: A reference to the bucket website url
+    Value: !GetAtt foxBucket.WebsiteURL 
+    Export:
+      Name: !Sub '${AWS::StackName}-WebsiteURL'
+
+  FoxBucketDomainName:
+    Description: A reference to the bucket website DomainName
+    Value: !GetAtt foxBucket.DomainName 
+    Export:
+      Name: !Sub '${AWS::StackName}-DomainName'
+
+  FoxBucketRDomainName:
+    Description: A reference to the bucket website RegionalDomainName
+    Value: !GetAtt foxBucket.RegionalDomainName 
+    Export:
+      Name: !Sub '${AWS::StackName}-RegionalDomainName'
+
+  FoxBucketArn:
+    Description: A reference to the bucket website url
+    Value: !Ref foxBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-WebsiteArn'
+  
+           
+  
+  

@@ -1,0 +1,25 @@
+---
+Description:
+  This template deploys a request and deploys an ssl certificate in us-east-1. Stack name is foxcertificate
+
+Resources:
+  FoxCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties: 
+      CertificateTransparencyLoggingPreference: ENABLED
+      DomainName: fox.nasfinancialgroup.com
+      DomainValidationOptions:
+        -   DomainName: fox.nasfinancialgroup.com
+            # HostedZoneId: Z029856838X6MK6DAQ90R
+            ValidationDomain: fox.nasfinancialgroup.com
+      ValidationMethod: DNS
+      Tags: 
+        - Key: "Group"
+          Value: "Fox"
+      
+Outputs:
+  certificatearn:
+    Description: A reference to the certificate arn
+    Value: !Ref FoxCertificate
+    Export:
+      Name: !Sub '${AWS::StackName}-Arn'

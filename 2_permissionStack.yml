@@ -1,0 +1,158 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: This template deploys IAM groups, users, instanceprofile and SSM role
+Parameters:
+  OwnerName:
+    Description: The name that is prefixed to resource names
+    Type: String
+    Default: fox_cluster
+  
+  User1:
+    NoEcho: 'false'
+    Type: String
+    Description: Add an Operation Team member
+    Default: "Admin"
+    MinLength: '4'
+    MaxLength: '15'
+    ConstraintDescription: Must be a comma separated list of IAM User names (User1,User2)
+  User2:
+    NoEcho: 'false'
+    Type: String
+    Description: Add an Engineering Team member
+    Default: "EngineeringTeam"
+    MinLength: '4'
+    MaxLength: '15'
+    ConstraintDescription: Must be a comma separated list of IAM User names (User1,User2)
+  User3:
+    NoEcho: 'false'
+    Type: String
+    Description: Add a Security Team member
+    Default: "SecurityTeam"
+    MinLength: '4'
+    MaxLength: '15'
+    ConstraintDescription: Must be a comma separated list of IAM User names (User1,User2)
+ 
+  Password:
+    NoEcho: 'true'
+    Type: String
+    Description: New account password
+    MinLength: '6'
+    MaxLength: '15'
+    ConstraintDescription: the password must be between 1 and 15 characters
+
+Resources:
+  EngineeringTeam:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: !Sub ${OwnerName}_Engineering_Team
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      Path: /
+      Policies:
+        - PolicyName: DenyBillingAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Deny
+                Action: "aws-portal:*"
+                Resource: "*"
+
+  SecurityTeam:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: !Sub ${OwnerName}_Security_Team
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+  OperationsTeam:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: !Sub ${OwnerName}_Operations_Team
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      Path: /
+      Policies:
+        - PolicyName: AllowUSEast1Only
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Deny
+                Action: "*"
+                Resource: "*"
+                Condition:
+                  StringNotLike:
+                    aws:RequestedRegion: us-east-1
+
+  OperationsUser:
+    Type: AWS::IAM::User
+    Properties:
+      Groups: 
+        - !Ref OperationsTeam
+      LoginProfile:
+        Password: !Ref 'Password'
+        PasswordResetRequired: 'true'
+      UserName: !Ref User1
+   
+  EngineeringUser:
+    Type: AWS::IAM::User
+    Properties:
+      Groups: 
+        - !Ref EngineeringTeam
+      LoginProfile:
+        Password: !Ref 'Password'
+        PasswordResetRequired: 'true'
+      UserName: !Ref User2
+
+  SecurityUser:
+    Type: AWS::IAM::User
+    Properties:
+      Groups: 
+        - !Ref SecurityTeam
+      LoginProfile:
+        Password: !Ref 'Password'
+        PasswordResetRequired: 'true'
+      UserName: !Ref User3
+  
+  NasSSMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: ec2-ssm role for accessing the ec2-instance
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      RoleName: !Sub ${OwnerName}-ec2-ssm
+
+  MyIamInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: IamInstanceProfile
+      Path: "/"
+      Roles:
+        - !Ref NasSSMRole
+
+Outputs:
+  NasSSMRole:
+    Description: A reference to the MyIamInstanceProfile role
+    Value: !Ref NasSSMRole
+    Export:
+      Name: !Sub '${AWS::StackName}-NasSSMRole'
+
+  MyIamInstanceProfile:
+    Description: A reference to the MyIamInstanceProfile role
+    Value: !Ref MyIamInstanceProfile
+    Export:
+      Name: !Sub '${AWS::StackName}-MyIamInstanceProfile'
+
+  MyIamInstanceProfile2:
+    Description: A reference to the MyIamInstanceProfile role
+    Value: !GetAtt MyIamInstanceProfile.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-Arn'

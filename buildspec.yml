@@ -1,0 +1,43 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.9 #install python 3.9 version
+  pre_build:
+    commands:
+      - echo checking the version of python installedcodebuild-codebuildProject-service-role
+      - python3 --version
+      - echo installing cfn-lint
+      - pip3 install cfn-lint
+      - echo checking the cfn-lint version installed
+      - cfn-lint --version
+
+  build:
+    commands:
+      - echo validating the cfn template
+      - cfn-lint 1_networkStack.yml
+      - cfn-lint 2_permissionStack.yml
+      - cfn-lint 3_certificateStack.yml
+      - cfn-lint 4_serverStack.yml
+      - cfn-lint 5_cfdistributionStack.yml
+      - cfn-lint 6_recordsetStack.yml
+      - echo CloudFormation Template Build started on `date`**
+      - aws cloudformation package --template-file 1_networkStack.yml --s3-bucket fox.nasfinancialgroup.com/project_files --output-template-file OutputTemplate1.yml
+      - aws cloudformation package --template-file 2_permissionStack.yml --s3-bucket fox.nasfinancialgroup.com/project_files --output-template-file OutputTemplate2.yml
+      - aws cloudformation package --template-file 3_certificateStack.yml --s3-bucket fox.nasfinancialgroup.com/project_files --output-template-file OutputTemplate3.yml
+      - aws cloudformation package --template-file 4_serverStack.yml --s3-bucket fox.nasfinancialgroup.com/project_files --output-template-file OutputTemplate4.yml
+      - aws cloudformation package --template-file 5_cfdistributionStack.yml --s3-bucket fox.nasfinancialgroup.com/project_files --output-template-file OutputTemplate5.yml
+      - aws cloudformation package --template-file 6_recordsetStack.yml --s3-bucket fox.nasfinancialgroup.com/project_files --output-template-file OutputTemplate6.yml
+
+  post_build:
+    commands:
+      - echo Build completed on `date`
+artifacts:
+  files:
+    - OutputTemplate1.yml
+    - OutputTemplate2.yml
+    - OutputTemplate3.yml
+    - OutputTemplate4.yml
+    - OutputTemplate5.yml
+    - OutputTemplate5.yml

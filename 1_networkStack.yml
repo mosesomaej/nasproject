@@ -1,0 +1,610 @@
+---
+Description:
+  This template deploys a VPC, with 3 public and private subnets spread
+  across three Availability Zones. It deploys an internet gateway, with a default
+  route on the public subnets, and three NAT gateways in three public subnets. The stack name is networkStack
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that is prefixed to resource names
+    Type: String
+    Default: fox-nas
+
+  VpcCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.51.0.0/16
+
+  PublicSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.51.4.0/24
+
+  PublicSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.51.5.0/24
+
+  PublicSubnet3CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.51.6.0/24
+
+  PrivateSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
+    Type: String
+    Default: 10.51.1.0/24
+
+  PrivateSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
+    Type: String
+    Default: 10.51.2.0/24
+
+  PrivateSubnet3CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
+    Type: String
+    Default: 10.51.3.0/24
+  
+  SSHLocation:
+    Description: The IP address range that can be used to SSH to the EC2 instances
+    Type: String
+    MinLength: "9"
+    MaxLength: "18"
+    Default: 10.51.0.0/16
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+          
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-vpc
+
+# Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-igw
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+# Public Subnets
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Ref PublicSubnet1CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-pub-sub1
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Ref PublicSubnet2CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-pub-sub2
+
+  PublicSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      CidrBlock: !Ref PublicSubnet3CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-pub-sub3
+
+# Private Subnets
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-priv-sub1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-priv-sub2
+
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      CidrBlock: !Ref PrivateSubnet3CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-priv-sub3
+
+# Public Route Table
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-pub-rt
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  PublicSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet3
+
+# Private Route Tables
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-priv-rt1
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-priv-rt2
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      SubnetId: !Ref PrivateSubnet2
+
+  PrivateRouteTable3:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-priv-rt3
+
+  PrivateSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable3
+      SubnetId: !Ref PrivateSubnet3
+
+# Security Groups
+  NoIngressSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "no-ingress-sg"
+      GroupDescription: "Security group with no ingress rule"
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-sg
+
+  FrontAlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to client host
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-frontend-alb-sg
+  
+  FrontWebSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to client host
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref FrontAlbSg
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref FrontAlbSg
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-frontend-web-sg
+
+# Internal websever ALB Security Group
+  BackAlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to backend server
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref VpcCIDR
+        
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-backend-alb-sg
+
+  BackWebSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http/https access from the backend ALB to backend webserver
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref BackAlbSg
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref AudAlbSg
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref BackAlbSg
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-backend-web-sg
+
+# Relational Database Security Group
+  RdsSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http/https access from the backend ALB to backend webserver
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref BackWebSg
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref FrontWebSg
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-rds-sg
+
+#   Database Subnet Group
+
+  NasRdsSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties: 
+      DBSubnetGroupDescription: NAS Subnet Group
+      DBSubnetGroupName: nas-db-SubnetGroup
+      SubnetIds: 
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+        - !Ref PrivateSubnet3
+
+# Elastic File System Security Group
+  EfsSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http/https access from the backend ALB to backend webserver
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref VpcCIDR
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-efs-sg
+
+# Auditors Security Groups
+  AudAlbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http/https access from the backend ALB to backend webserver
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref VpcCIDR
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref VpcCIDR
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-aud-alb-sg
+
+# Network Access Control (NACL)
+
+  NasNACL:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-nacl
+  InboundRule:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref NasNACL
+      RuleNumber: 100
+      Protocol: -1
+      RuleAction: allow
+      CidrBlock: 0.0.0.0/0
+      
+  OutboundRule:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref NasNACL
+      RuleNumber: 100
+      Protocol: -1
+      Egress: true
+      RuleAction: allow
+      CidrBlock: 0.0.0.0/0
+
+# NAT gateway
+  NatGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-eip1
+
+  NatGateway2EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-eip2
+
+  NatGateway3EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-eip3
+
+  NATGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-ngw-1
+
+  NATGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway2EIP.AllocationId
+      SubnetId: !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-ngw-2
+
+  NATGateway3:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway3EIP.AllocationId
+      SubnetId: !Ref PublicSubnet3
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-ngw-3
+
+  RouteNATGateway1:
+    DependsOn: NATGateway1
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NATGateway1
+
+  RouteNATGateway2:
+    DependsOn: NATGateway2
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NATGateway2
+
+  RouteNATGateway3:
+    DependsOn: NATGateway3
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable3
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref NATGateway3
+
+# Outputs
+Outputs:
+  VPC:
+    Description: A reference to the created VPC
+    Value: !Ref VPC
+    Export:
+      Name: !Sub '${AWS::StackName}-VPCID'
+
+  PublicSubnets:
+    Description: A list of the public subnets
+    Value:
+      !Join [",", [!Ref PublicSubnet1, !Ref PublicSubnet2, !Ref PublicSubnet3]]
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicSubnetIds'
+
+  PrivateSubnets:
+    Description: A list of the private subnets
+    Value:
+      !Join [
+        ",",
+        [!Ref PrivateSubnet1, !Ref PrivateSubnet2, !Ref PrivateSubnet3],
+      ]
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnetIds'
+
+  PublicSubnet1:
+    Description: A reference to the public subnet in the 1st Availability Zone
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicsubnetOneId'
+
+  PublicSubnet2:
+    Description: A reference to the public subnet in the 2nd Availability Zone
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicsubnetTwoId'
+
+  PublicSubnet3:
+    Description: A reference to the public subnet in the 3rd Availability Zone
+    Value: !Ref PublicSubnet3
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicsubnetThreeId'
+
+  PrivateSubnet1:
+    Description: A reference to the private subnet in the 1st Availability Zone
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnetOneId'
+
+  PrivateSubnet2:
+    Description: A reference to the private subnet in the 2nd Availability Zone
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnetTwoId'
+
+  PrivateSubnet3:
+    Description: A reference to the private subnet in the 3rd Availability Zone
+    Value: !Ref PrivateSubnet3
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnetThreeId'
+
+  NoIngressSecurityGroup:
+    Description: Security group with no ingress rule
+    Value: !Ref NoIngressSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-NoIngressSGId'
+  
+  FrontAlbSg:
+    Description: A reference to the security group of the internet facing ALB
+    Value: !Ref FrontAlbSg
+    Export:
+      Name: !Sub '${AWS::StackName}-FrontAlbSgId'
+
+  FrontWebSg:
+    Description: A reference to the security group of the webserver in the public subnet
+    Value: !Ref FrontWebSg
+    Export:
+      Name: !Sub '${AWS::StackName}-FrontWebSgId'
+  
+  BackAlbSg:
+    Description: A reference to the security group of the ALB in the private subnet
+    Value: !Ref BackAlbSg
+    Export:
+      Name: !Sub '${AWS::StackName}-BackAlbSgId'
+  
+  BackWebSg:
+    Description: A reference to the security group of the webserver in the private subnet
+    Value: !Ref BackWebSg
+    Export:
+      Name: !Sub '${AWS::StackName}-BackWebSgId'
+  
+  RdsSg:
+    Description: A reference to the security group of the relational database
+    Value: !Ref RdsSg
+    Export:
+      Name: !Sub '${AWS::StackName}-RdsSgId'
+
+  NasRdsSubnetGroup:
+    Description: A reference to the relational database Subnet group name
+    Value: !Ref NasRdsSubnetGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-db-SubnetGroupName'
+
+  EfsSg:
+    Description: A reference to the security group of the elastic file system
+    Value: !Ref EfsSg
+    Export:
+      Name: !Sub '${AWS::StackName}-EfsSgId'
+    
+  AudAlbSg:
+    Description: A reference to the security group of the auditor's alb
+    Value: !Ref AudAlbSg
+    Export:
+      Name: !Sub '${AWS::StackName}-AudAlbSgId'

@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  FoxCertificate:
+    Type: "AWS::SSM::Parameter::Value<String>"
+    Default: certificate
+  
+  ServerStack:
+    Type: String
+    Description: A reference to the server stack
+    Default: foxserverStack #exported stack name
+  
+Resources:
+  # CfS3Distro:
+  #   Type: AWS::CloudFront::Distribution
+  #   Properties:
+  #     DistributionConfig:
+  #       DefaultCacheBehavior: 
+  #         CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+  #         ForwardedValues:
+  #           QueryString: 'false'
+  #           Cookies:
+  #             Forward: none
+  #         TargetOriginId: foxstaticweb
+  #         ViewerProtocolPolicy: redirect-to-https
+  #         AllowedMethods: [GET, HEAD]
+  #       DefaultRootObject: index.html
+  #       Enabled: 'true'
+  #       Origins:
+  #         - Id: foxstaticweb
+  #           DomainName: 
+  #             Fn::ImportValue:
+  #               Fn::Sub: ${ServerStack}-DomainName
+  #           S3OriginConfig:
+  #             OriginAccessIdentity: ""
+
+  FoxCloudfrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: 
+              Fn::ImportValue:
+                Fn::Sub: ${ServerStack}-AlbDNS
+            Id: MyALBOrigin
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: http-only
+        DefaultCacheBehavior:
+          TargetOriginId: MyALBOrigin
+          ForwardedValues:
+            QueryString: true
+          ViewerProtocolPolicy: redirect-to-https
+        Enabled: 'true'
+        Aliases:
+          - fox.nasfinancialgroup.com
+        CNAMEs: 
+          - fox.nasfinancialgroup.com
+        ViewerCertificate:
+          AcmCertificateArn: !Ref FoxCertificate
+          MinimumProtocolVersion: TLSv1.2_2021
+          SslSupportMethod: sni-only
+
+Outputs:
+  DistributionDNSName:
+    Value: !GetAtt FoxCloudfrontDistribution.DomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-DomainName'

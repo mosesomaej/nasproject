@@ -1,0 +1,65 @@
+Parameters:
+  FoxHostedZoneId:
+    Type: String
+    Description: FQDN Hosted zone ID from Route 53
+    Default: Z029856838X6MK6DAQ90R
+
+  CfHostedZoneId:
+    Type: String
+    Description: Cloudformation Hosted Zone ID
+    Default: Z2FDTNDATAQYW2
+
+  S3HostedZoneID:
+    Type: String
+    Description: CS3 Hosted Zone ID Canada central
+    Default: Z3AQBSTGFYJSTF
+
+  CfDomainName:
+    Type: String
+    Description: Domain name of cloudfront distribtion
+    Default: cfdistributionStack
+
+  serverStack:
+    Type: String
+    Description: ServerStack
+    Default: foxserverStack #exported stack name
+
+Mappings:
+  RegionMap:
+    ca-central-1:
+      name: "ca-central-1"
+    # us-east-1:
+    #   name: "us-east-1"
+    # us-west-1:
+    #   name: "us-west-1"
+    # us-west-2:
+    #   name: "us-west-2"
+
+Resources:
+  FoxRecordSets:
+    Type: "AWS::Route53::RecordSetGroup"
+    Properties:
+      HostedZoneId: !Ref FoxHostedZoneId
+      RecordSets:
+        - Name: 'fox.nasfinancialgroup.com'
+          Type: A
+          AliasTarget:
+            DNSName:
+              Fn::ImportValue:
+                Fn::Sub: ${CfDomainName}-DomainName
+            HostedZoneId: Z2FDTNDATAQYW2 #!Ref CfHostedZoneId
+          SetIdentifier: 'Canada'
+          GeoLocation:
+            CountryCode: CA
+#         - Name: 'fox.nasfinancialgroup.com'
+#           Type: A
+#           AliasTarget:
+#             DNSName: fox.nasfinancialgroup.com.s3.ca-central-1.amazonaws.com
+#               # Fn::ImportValue:
+#               #   Fn::Sub: ${serverStack}-DomainName 
+#             HostedZoneId: !Ref S3HostedZoneID
+#           SetIdentifier: Default
+#           GeoLocation:
+#             ContinentCode: !If [IsCanada, 'NA', 'default']
+# Conditions:
+#   IsCanada: !Equals [!FindInMap [RegionMap, !Ref 'AWS::Region', name], ca-central-1]
